@@ -1,6 +1,7 @@
 name: Build base images
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: ["master"]
   push:
@@ -15,7 +16,9 @@ on:
     types: ["published"]
 
 env:
-  ARCHITECTURES: '["amd64", "aarch64"]'
+  REGISTRY_PREFIX: ghcr.io/${{ github.repository_owner }}
+  BASE_IMAGE_REGISTRY_PREFIX: ghcr.io/${{ github.repository_owner }}
+  ARCHITECTURES: '["armv7", "armhf"]'
   BUILD_TYPE: generic
   IMAGE_NAME: homeassistant-base
 
@@ -43,10 +46,11 @@ jobs:
 
       - name: Get build matrix
         id: matrix
-        uses: home-assistant/builder/actions/prepare-multi-arch-matrix@62a1597b84b3461abad9816d9cd92862a2b542c3 # 2026.03.2
+        uses: edbordin/homeassistant-builder/actions/prepare-multi-arch-matrix@restore-armv7-armhf-builds
         with:
           architectures: ${{ env.ARCHITECTURES }}
           image-name: ${{ env.IMAGE_NAME }}
+          registry-prefix: ${{ env.REGISTRY_PREFIX }}
 
   build:
     name: Build ${{ matrix.arch }} base image
@@ -86,34 +90,36 @@ jobs:
           requirements: "requirements.txt"
 
       - name: Build base image
-        uses: home-assistant/builder/actions/build-image@62a1597b84b3461abad9816d9cd92862a2b542c3 # 2026.03.2
+        uses: edbordin/homeassistant-builder/actions/build-image@restore-armv7-armhf-builds
         with:
           arch: ${{ matrix.arch }}
+          build-args: |
+            BUILD_FROM=${{ env.BASE_IMAGE_REGISTRY_PREFIX }}/base-python:3.14-alpine3.22
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
-          cosign-base-identity: 'https://github.com/home-assistant/docker-base/.*'
-          cosign-base-verify: ghcr.io/home-assistant/base-python:3.14-alpine3.22
           image: ${{ matrix.image }}
           image-tags: |
             ${{ needs.init.outputs.version }}
             latest
-          push: ${{ github.event_name == 'release' }}
+          platform: ${{ matrix.platform }}
+          push: ${{ github.event_name != 'pull_request' }}
           version: ${{ needs.init.outputs.version }}
 
   manifest:
     name: Publish multi-arch manifest
     needs: [init, build]
-    if: github.event_name == 'release'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
       packages: write
     steps:
       - name: Publish multi-arch manifest
-        uses: home-assistant/builder/actions/publish-multi-arch-manifest@62a1597b84b3461abad9816d9cd92862a2b542c3 # 2026.03.2
+        uses: edbordin/homeassistant-builder/actions/publish-multi-arch-manifest@restore-armv7-armhf-builds
         with:
           architectures: ${{ env.ARCHITECTURES }}
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
           image-name: ${{ env.IMAGE_NAME }}
+          registry-prefix: ${{ env.REGISTRY_PREFIX }}
           image-tags: |
             ${{ needs.init.outputs.version }}
             latest
