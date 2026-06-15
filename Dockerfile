@@ -149,6 +149,7 @@ RUN \
         openssh-client \
         p8-platform \
         pianobar \
+        postgresql-libs \
         popt \
         pulseaudio-alsa \
         socat
@@ -156,8 +157,15 @@ RUN \
 RUN \
     --mount=type=bind,src=./requirements.txt,dst=/tmp/requirements.txt \
     --mount=type=cache,target=/root/.cache/pip,sharing=locked,id=pip-cache-${BUILD_FROM} \
-    pip3 install --only-binary=:all: \
-        -r /tmp/requirements.txt
+    apk add --virtual .pip-build-deps \
+        build-base \
+        libffi-dev \
+        mariadb-dev \
+        pkgconf \
+        postgresql-dev \
+    && pip3 install \
+        -r /tmp/requirements.txt \
+    && apk del .pip-build-deps
 
 WORKDIR /usr/src/
 
